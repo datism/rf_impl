@@ -1,10 +1,11 @@
 import math
-from telnetlib import X3PAD
 import numpy as np
 import pandas as pd
-from sklearn import preprocessing
-from sklearn.model_selection import train_test_split
-from sklearn.ensemble import RandomForestClassifier
+import pickle
+import seaborn as sns
+import matplotlib.pyplot as plt
+
+from sklearn.metrics import mean_squared_error
 
 
 def std_agg(cnt, s1, s2): return math.sqrt((s2/cnt) - (s1/cnt)**2)
@@ -17,16 +18,21 @@ class DecisionTree():
         self.n, self.c = len(idxs), x.shape[1]
         self.val = np.mean(y[idxs])
         self.score = float('inf')
+
         self.find_varsplit()
         
     def find_varsplit(self):
         for i in self.f_idxs: self.find_better_split(i)
+
         if self.is_leaf: return
+
         x = self.split_col
         lhs = np.nonzero(x<=self.split)[0]
         rhs = np.nonzero(x>self.split)[0]
+
         lf_idxs = np.random.permutation(self.x.shape[1])[:self.n_features]
         rf_idxs = np.random.permutation(self.x.shape[1])[:self.n_features]
+
         self.lhs = DecisionTree(self.x, self.y, self.n_features, lf_idxs, self.idxs[lhs], depth=self.depth-1, min_leaf=self.min_leaf)
         self.rhs = DecisionTree(self.x, self.y, self.n_features, rf_idxs, self.idxs[rhs], depth=self.depth-1, min_leaf=self.min_leaf)
 
@@ -36,9 +42,8 @@ class DecisionTree():
         sort_y,sort_x = y[sort_idx], x[sort_idx]
         rhs_cnt,rhs_sum,rhs_sum2 = self.n, sort_y.sum(), (sort_y**2).sum()
         lhs_cnt,lhs_sum,lhs_sum2 = 0,0.,0.
-    
 
-        for i in range(0,self.n-self.min_leaf-1):
+        for i in range(0, self.n - self.min_leaf - 1):
             xi,yi = sort_x[i],sort_y[i]
             lhs_cnt += 1; rhs_cnt -= 1
             lhs_sum += yi; rhs_sum -= yi
@@ -98,38 +103,39 @@ class RandomForest():
 
        
 
-my_data = pd.read_csv("data/drug200.csv", delimiter=",")
+with open('data/diabetes_train.pkl', 'rb') as f:
+    diabetes_train = pickle.load(f)
+print("Số chiều input: ", diabetes_train['data'].shape)
+print("Số chiều target y tương ứng: ", diabetes_train['target'].shape)
+print()
 
-X = my_data[['Age', 'Sex', 'BP', 'Cholesterol', 'Na_to_K']].values
+print("2 mẫu dữ liệu đầu tiên:")
+print("input: ", diabetes_train['data'][:2])
+print("target: ", diabetes_train['target'][:2])
+print()
 
-le_sex = preprocessing.LabelEncoder()
-le_sex.fit(['F','M'])
-X[:,1] = le_sex.transform(X[:,1])
+drugTree = RandomForest(diabetes_train['data'], diabetes_train['target'], 100, 'sqrt', diabetes_train['data'].shape[0])
+print()
 
-le_BP = preprocessing.LabelEncoder()
-le_BP.fit([ 'LOW', 'NORMAL', 'HIGH'])
-X[:,2] = le_BP.transform(X[:,2])
+# đọc dữ liệu test
+# dữ liệu test có cấu trúc giống dữ liệu huấn luyện nhưng số lượng mẫu chỉ là 42
+with open('data/diabetes_test.pkl', 'rb') as f:
+    diabetes_test = pickle.load(f)
 
-le_Chol = preprocessing.LabelEncoder()
-le_Chol.fit([ 'NORMAL', 'HIGH'])
-X[:,3] = le_Chol.transform(X[:,3]) 
+# Thực hiện phán đoán cho dữ liệu mới
+diabetes_y_pred = drugTree.predict(diabetes_test['data'])
 
-y = my_data["Drug"]
-le_Drug = preprocessing.LabelEncoder()
-le_Drug.fit(y)
-y = le_Drug.transform(y)
+df = pd.DataFrame(data=np.array([diabetes_test['target'], diabetes_y_pred,
+                            abs(diabetes_test['target'] - diabetes_y_pred)]).T,
+             columns=["y thực tế", "y dự đoán", "Lệch"])
 
-X_trainset, X_testset, y_trainset, y_testset = train_test_split(X, y, test_size=0.3, random_state=3)
+# In ra 5 phán đoán đầu tiên
+print(df.head(5))
+print()
 
-# drugTree = RandomForestClassifier(n_estimators=100)
-# drugTree.fit(X_trainset,y_trainset)
-# predTree = drugTree.predict(X_testset)
+rmse = math.sqrt(mean_squared_error(diabetes_test['target'], diabetes_y_pred))
+print(f'RMSE = {rmse}')
+print()
 
-drugTree = RandomForest(X_trainset, y_trainset, 100, 'sqrt', X_trainset.shape[0])
-
-predTree = drugTree.predict(X_testset)
-print("test: \n", y_testset)
-print("predict: \n", predTree)
-
-
-
+sns.histplot(diabetes_y_pred)
+plt.show()
