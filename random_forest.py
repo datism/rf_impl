@@ -1,4 +1,6 @@
+from array import array
 import math
+import time
 import numpy as np
 import pandas as pd
 import pickle
@@ -28,10 +30,12 @@ class DecisionTree():
         if self.is_leaf: 
             return
 
+        #lấy dữ liệu của cột được chọn để tach
         x = self.split_col
         lhs = np.nonzero(x<=self.split)[0]
         rhs = np.nonzero(x>self.split)[0]
 
+        #random index cho thuộc tinh
         lf_idxs = np.random.permutation(self.x.shape[1])[:self.n_features]
         rf_idxs = np.random.permutation(self.x.shape[1])[:self.n_features]
 
@@ -43,10 +47,13 @@ class DecisionTree():
         sort_idx = np.argsort(x)
         sort_y,sort_x = y[sort_idx], x[sort_idx]
 
+        #phần bên phải
         rhs_cnt,rhs_sum,rhs_sum2 = self.n, sort_y.sum(), (sort_y**2).sum()
+        #phần bên trái
         lhs_cnt,lhs_sum,lhs_sum2 = 0,0.,0.
 
         for i in range(0, self.n - self.min_leaf - 1):
+            #lấy phần tử bên phải chuyển sang bên trái
             xi,yi = sort_x[i],sort_y[i]
             lhs_cnt += 1; rhs_cnt -= 1
             lhs_sum += yi; rhs_sum -= yi
@@ -54,7 +61,8 @@ class DecisionTree():
 
             if i < self.min_leaf or xi == sort_x[i+1]:
                 continue
-
+            
+            #tính độ lệch chuẩn của 2 phần
             lhs_std = std_agg(lhs_cnt, lhs_sum, lhs_sum2)
             rhs_std = std_agg(rhs_cnt, rhs_sum, rhs_sum2)
             curr_score = lhs_std*lhs_cnt + rhs_std*rhs_cnt
@@ -80,6 +88,8 @@ class DecisionTree():
 class RandomForest():
     def __init__(self, x, y, n_trees, n_features, sample_sz, depth = 10, min_leaf = 5):
         np.random.seed(12)
+
+        #số thuộc tính được truyền cho mỗi cây con
         if n_features == 'sqrt':
             self.n_features = int(np.sqrt(x.shape[1]))
         elif n_features == 'log2':
@@ -92,18 +102,20 @@ class RandomForest():
         self.trees = [self.create_tree() for i in range(n_trees)]
 
     def create_tree(self):
+        #random index cho dữ liệu train
         idxs = np.random.permutation(len(self.y))[:self.sample_sz]
+        #random index cho thuộc tính
         f_idxs = np.random.permutation(self.x.shape[1])[:self.n_features]
 
         return DecisionTree(self.x[idxs], self.y[idxs], self.n_features, f_idxs,
                     idxs=np.array(range(self.sample_sz)), depth = self.depth, min_leaf=self.min_leaf)
         
     def predict(self, x):
-        return np.around(np.mean([t.predict(x) for t in self.trees], axis = 0))
+        return np.mean([t.predict(x) for t in self.trees], axis = 0)
 
 
-       
 
+# đọc dữ liệu train      
 with open('data/diabetes_train.pkl', 'rb') as f:
     diabetes_train = pickle.load(f)
 print("Số chiều input: ", diabetes_train['data'].shape)
@@ -114,10 +126,19 @@ print()
 # print("input: ", diabetes_train['data'][:2])
 # print("target: ", diabetes_train['target'][:2])
 # print()
+trainTime = [0, 0]
+predTime = [0, 0]
+rmse = [0, 0]
 
+# Train
+start = time.time()
 diabetesTree = RandomForest(diabetes_train['data'], diabetes_train['target'], 100, 'sqrt', diabetes_train['data'].shape[0])
+trainTime[0] = time.time() - start
+
+start = time.time()
 diabetes1Tree = RandomForestRegressor(n_estimators=100, max_depth=10, min_samples_leaf=5)
 diabetes1Tree.fit(diabetes_train['data'], diabetes_train['target'])
+trainTime[1] = time.time() - start
 
 # đọc dữ liệu test
 # dữ liệu test có cấu trúc giống dữ liệu huấn luyện nhưng số lượng mẫu chỉ là 42
@@ -125,23 +146,35 @@ with open('data/diabetes_test.pkl', 'rb') as f:
     diabetes_test = pickle.load(f)
 
 # Thực hiện phán đoán cho dữ liệu mới
+start = time.time()
 diabetes_y_pred = diabetesTree.predict(diabetes_test['data'])
-diabetes_y_pred1 = diabetes1Tree.predict(diabetes_test['data'])
+predTime[0] = time.time() - start
 
+start = time.time()
+diabetes_y_pred1 = diabetes1Tree.predict(diabetes_test['data'])
+predTime[1] = time.time() - start
+
+# In ra 5 phán đoán đầu tiên
+print("-----5 phán đoán đầu tiên-----")
 df = pd.DataFrame(data=np.array([diabetes_test['target'], diabetes_y_pred,
                             abs(diabetes_test['target'] - diabetes_y_pred)]).T,
              columns=["y thực tế", "y dự đoán", "Lệch"])
 
-# In ra 5 phán đoán đầu tiên
 print(df.head(5))
 print()
 
-rmse = math.sqrt(mean_squared_error(diabetes_test['target'], diabetes_y_pred))
-print(f'RMSE RandomForest = {rmse}')
-rmse = math.sqrt(mean_squared_error(diabetes_test['target'], diabetes_y_pred1))
-print(f'RMSE RandomForestRegressor = {rmse}')
+# Tính RMSE
+rmse[0] = math.sqrt(mean_squared_error(diabetes_test['target'], diabetes_y_pred))
+rmse[1] = math.sqrt(mean_squared_error(diabetes_test['target'], diabetes_y_pred1))
+
+# So sánh hai mô hình
+print("-----So sánh hai mô hình-----")
+cmp = pd.DataFrame({'thời gian train': trainTime, 'thời gian dự đoán': predTime, 'rmse': rmse},
+                        index={'RF', 'RFR'})
+print(cmp)
 print()
 
+# Biểu đồ phân phối đầu ra
 plt.figure(figsize=(8, 8))
 
 plt.subplot(311)
