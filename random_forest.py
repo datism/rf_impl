@@ -61,7 +61,7 @@ class DecisionTree():
     def split_name(self): return self.x.columns[self.var_idx]
     
     @property
-    def split_col(self): return self.x[self.idxs,self.var_idx]
+    def split_col(self): return self.x[self.idxs, self.var_idx]
 
     @property
     def is_leaf(self): return self.score == float('inf') or self.depth <= 0 
@@ -99,7 +99,8 @@ class RandomForest():
                     idxs=np.array(range(self.sample_sz)), depth = self.depth, min_leaf=self.min_leaf)
         
     def predict(self, x):
-        return np.mean([t.predict(x) for t in self.trees], axis = 0)
+        return np.around(np.mean([t.predict(x) for t in self.trees], axis = 0))
+
 
        
 

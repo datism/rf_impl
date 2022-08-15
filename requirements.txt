@@ -5,7 +5,7 @@ scipy
 sklearn
 scikit-image
 seaborn
-scikit-learn==0.23.2
+scikit-learn
 pyvi
-beautifulsoup4==4.9.3
+beautifulsoup4
 PyYAML
